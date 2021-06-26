@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+
+import argparse
+import serial
+import socket
+import sys
+
+
+def getArgs() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("--max-requests",
+                        type=int,
+                        default=5,
+                        help="Max number of requests to queue before refusing %(default)s)")
+    parser.add_argument("--port", "-p",
+                        type=int,
+                        default=42069,
+                        help="Port no. for TCP connection (default %(default)s)")
+    parser.add_argument("--serial-device", "-s",
+                        type=str,
+                        default="/dev/ttyACM0",
+                        help="Serial device Arduino is attached to %(default)s)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="More output")
+    return parser.parse_args()
+
+
+def main(args) -> int:
+    ser = serial.Serial(args.serial_device)
+    # create IPV4 TCP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # bind to any address the machine has, on port args.port
+        sock.bind(("", args.port))
+        sock.listen(args.max_requests)
+        while True:
+            connection, address = sock.accept()
+            print("Connected by {}".format(address), file=sys.stderr)
+            with connection:
+                while True:
+                    data = connection.recv(1024)  ## TODO: unhardcode 1024
+                    if not data:
+                        break
+                    print(data)
+                    ser.write(data.strip())
+    
+
+if __name__ == '__main__':
+    sys.exit(main(getArgs()))

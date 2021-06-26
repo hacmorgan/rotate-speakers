@@ -54,6 +54,14 @@ void initMotor()
   }
 }
 
+void rotateTest()
+{
+  turnMotor(M1,  200);
+  turnMotor(M1, -200);
+  turnMotor(M2,  200);
+  turnMotor(M2, -200);
+}
+
 /**  motorNumber: M1, M2
 direction:          forward, backward **/
 void setMotorDirection( int motorNumber, int direction ) {
@@ -80,6 +88,21 @@ void rampMotorSpeed( int motorNumber, int start, int stop )
 }
 
 
+void decodeMessage( String message )
+{
+  int commaPos = message.indexOf(',');
+  if ( commaPos < 0 ) {
+    return;
+  } else {
+    int m1Positions = message.substring(          0,         commaPos ).toInt();
+    int m2Positions = message.substring( commaPos+1, message.length() ).toInt();
+    turnMotor( M1, m1Positions );
+    turnMotor( M2, m2Positions );
+    /* Serial.println("Done turning"); */
+  }
+}
+
+
 void printPositions( int positions )
 {
   Serial.print("Turning ");
@@ -87,22 +110,39 @@ void printPositions( int positions )
   Serial.println(" positions...");
 }
 
+bool stillTurning( int positions, Encoder* enc, unsigned long startTime, int timeout )
+{
+  unsigned long dt = (millis() - startTime);
+  Serial.println(dt);
+  /* return abs(enc->read()) < abs(positions) && dt > 0 && dt < timeout ; */
+  return abs(enc->read()) < abs(positions);
+}
+
 void turnMotor( int motorNumber, int positions )
 {
-  M1Encoder.write(0);
-  /* printPositions( positions ); */
+  Encoder* enc;
+  if ( motorNumber == M1 ) {
+    enc = &M1Encoder;
+  } else {
+    enc = &M2Encoder;
+  }
+  enc->write(0);
   if ( positions > 0 ) {
     setMotorDirection( motorNumber, forward );
-    setMotorSpeed( motorNumber, 100 );
-    while ( M1Encoder.read() < positions ) { ; }
-    setMotorSpeed( motorNumber,   0 );
   }
   else if ( positions < 0 ) {
     setMotorDirection( motorNumber, backward );
-    setMotorSpeed( motorNumber, 100 );
-    while ( M1Encoder.read() > positions ) { ; }
-    setMotorSpeed( motorNumber,   0 );
   }
+  setMotorSpeed( motorNumber, 100 );
+  unsigned long startTime = millis();
+  unsigned long timeout = 3000;  // seconds
+  while ( stillTurning( positions, enc, startTime, timeout ) ) {
+    if ( millis() - startTime > timeout ) {
+      break;
+    }
+    delay(50);
+  }
+  setMotorSpeed( motorNumber,   0 );
 }
 
 
@@ -110,14 +150,14 @@ void setup()
 {
   setupSerial();
   initMotor();
+  rotateTest();
 }
 
 
 void loop()
 {
-  M1Encoder.write(0);
-  int positions = 0;
-  while ( true ) {
-    turnMotor( M1, Serial.parseInt() );
+  while ( Serial.available() > 0 ) {
+    String input = Serial.readString();
+    decodeMessage( input );
   }
 }
