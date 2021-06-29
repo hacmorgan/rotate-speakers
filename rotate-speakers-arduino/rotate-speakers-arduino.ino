@@ -1,8 +1,19 @@
 /**
  * Control two geared motors with encoders
+ *
+ * Reads ascii messages on serial of the form <m1positions>,<m2positions>
+ * and turns motors accordingly. 
+ * 
+ * Conversion to degrees is handled externally
+ *
+ * @author  Hamish Morgan
+ * @license BSD
+ * @date    27/06/2021
  */
 
+
 #include <Encoder.h>
+
 
 /// Simple struct to hold motor control pins
 typedef struct {
@@ -17,18 +28,18 @@ const int E2Pin = 6;
 const int M2Pin = 7;
 
 const MotorContrl MotorPin[] = {
-  {E1Pin, M1Pin},
-  {E2Pin, M2Pin}
+  { E1Pin, M1Pin },
+  { E2Pin, M2Pin }
 };
 
 /// Motor indices for MotorPin[] 
 const int M1 = 0;
 const int M2 = 1;
-const int MotorNum = 2;
+const int NumMotors = 2;
 
 /// Motor direction aliases
-const int  forward = LOW;
-const int backward = HIGH;
+const int  FORWARD = LOW;
+const int BACKWARD = HIGH;
 
 /// Encoder pins
 const int M1APhase = 18;
@@ -45,9 +56,9 @@ void setupSerial()
   Serial.begin(9600);
 }
 
-void initMotor()
+void initialiseMotors()
 {
-  for ( int i = 0; i < MotorNum; i++ ) {
+  for ( int i = 0; i < NumMotors; i++ ) {
     digitalWrite(MotorPin[i].enablePin, LOW);
     pinMode(MotorPin[i].enablePin,    OUTPUT);
     pinMode(MotorPin[i].directionPin, OUTPUT);
@@ -56,21 +67,19 @@ void initMotor()
 
 void rotateTest()
 {
-  turnMotor(M1,  200);
-  turnMotor(M1, -200);
-  turnMotor(M2,  200);
-  turnMotor(M2, -200);
+  int  forward[] = {  200,  200 };
+  int backward[] = { -200, -200 };
+  turnMotors(  forward );
+  turnMotors( backward );
 }
 
-/**  motorNumber: M1, M2
-direction:          forward, backward **/
 void setMotorDirection( int motorNumber, int direction ) {
   digitalWrite( MotorPin[motorNumber].directionPin, direction);
 }
 
-/** speed:  0-100   * */
 inline void setMotorSpeed( int motorNumber, int speed ) {
-  analogWrite(MotorPin[motorNumber].enablePin, 255.0 * (speed / 100.0) ); //PWM
+  analogWrite( MotorPin[motorNumber].enablePin,
+               255.0 * (speed / 100.0)          ); //PWM
 }
 
 
@@ -94,11 +103,11 @@ void decodeMessage( String message )
   if ( commaPos < 0 ) {
     return;
   } else {
-    int m1Positions = message.substring(          0,         commaPos ).toInt();
-    int m2Positions = message.substring( commaPos+1, message.length() ).toInt();
-    turnMotor( M1, m1Positions );
-    turnMotor( M2, m2Positions );
-    /* Serial.println("Done turning"); */
+    int motorPositions[] = {
+      message.substring(          0,         commaPos ).toInt(),
+      message.substring( commaPos+1, message.length() ).toInt()
+    };
+    turnMotors( motorPositions );
   }
 }
 
@@ -110,46 +119,91 @@ void printPositions( int positions )
   Serial.println(" positions...");
 }
 
-bool stillTurning( int positions, Encoder* enc, unsigned long startTime, int timeout )
+bool stillTurning( int motorNumber, int positions )
 {
-  unsigned long dt = (millis() - startTime);
-  Serial.println(dt);
-  /* return abs(enc->read()) < abs(positions) && dt > 0 && dt < timeout ; */
-  return abs(enc->read()) < abs(positions);
+  if ( motorNumber == M1 ) {
+    return abs(M1Encoder.read()) < abs(positions);
+  } else {
+    return abs(M2Encoder.read()) < abs(positions);
+  }
 }
 
-void turnMotor( int motorNumber, int positions )
+bool eitherStillTurning( int* positions )
 {
-  Encoder* enc;
-  if ( motorNumber == M1 ) {
-    enc = &M1Encoder;
-  } else {
-    enc = &M2Encoder;
-  }
-  enc->write(0);
-  if ( positions > 0 ) {
-    setMotorDirection( motorNumber, forward );
-  }
-  else if ( positions < 0 ) {
-    setMotorDirection( motorNumber, backward );
-  }
-  setMotorSpeed( motorNumber, 100 );
-  unsigned long startTime = millis();
-  unsigned long timeout = 3000;  // seconds
-  while ( stillTurning( positions, enc, startTime, timeout ) ) {
-    if ( millis() - startTime > timeout ) {
-      break;
+  return abs(M1Encoder.read()) < abs(positions[M1]) ||
+         abs(M2Encoder.read()) < abs(positions[M2]);
+}
+
+void resetEncoders()
+{
+  M1Encoder.write(0);
+  M2Encoder.write(0);
+}
+
+void setMotorDirections( int* positions )
+{
+  for ( int i = 0; i < NumMotors; i++ ) {
+    if ( positions[i] > 0 ) {
+        setMotorDirection( i, FORWARD );
     }
-    delay(50);
+    else if ( positions[i] < 0 ) {
+        setMotorDirection( i, BACKWARD );
+    }
   }
-  setMotorSpeed( motorNumber,   0 );
+}
+
+void motorsOn( int* positions )
+{
+  for ( int i = 0; i < NumMotors; i++ ) {
+    if ( positions[i] != 0 ) {
+      setMotorSpeed( i, 100 );
+    } else {
+      setMotorSpeed( i,   0 );
+    }
+  }
+}
+
+void motorOff( int motorNumber )
+{
+  setMotorSpeed( motorNumber, 0 );
+}
+
+void motorsOff()
+{
+  for ( int i = 0; i < NumMotors; i++ ) {
+    setMotorSpeed( i, 0 );
+  }
+}
+
+bool notTimedOut( unsigned long startTime, unsigned long timeout )
+{
+  return millis() - startTime < timeout;
+}
+
+void turnMotors( int positions[] )
+{
+  resetEncoders();
+  setMotorDirections( positions );
+  motorsOn( positions );
+  unsigned long startTime = millis();
+  unsigned long timeout = 3000;  // milliseconds
+  while ( eitherStillTurning( positions ) &&
+          notTimedOut( startTime, timeout ) ) {
+    for ( int i = 0; i < NumMotors; i++ ) {
+      if ( ! stillTurning( i, positions[i] ) ) {
+        motorOff(i);
+      }
+    }
+    delay(10);
+  }
+  motorsOff();
 }
 
 
 void setup()
 {
   setupSerial();
-  initMotor();
+  initialiseMotors();
   rotateTest();
 }
 
