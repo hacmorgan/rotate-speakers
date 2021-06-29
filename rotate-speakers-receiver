@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 
 
+"""
+@file
+
+Receive messages over TCP, send to Arduino over serial
+
+@author  Hamish Morgan
+@license BSD
+@date    29/06/2021
+"""
+
+
 import argparse
 import serial
 import socket
