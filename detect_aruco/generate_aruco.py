@@ -25,6 +25,5 @@ right = left.copy()
 cv2.aruco.drawMarker(dictionary=aruco_dict, id=0, sidePixels=300, img=left, borderBits=1)
 cv2.aruco.drawMarker(dictionary=aruco_dict, id=1, sidePixels=300, img=right, borderBits=1)
 
-cv2.imshow("left", left)
-cv2.imshow("right", right)
-cv2.waitKey(0)
+cv2.imwrite("left_aruco.png", left)
+cv2.imwrite("right_aruco.png", right)
