@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+
+# @file
+#
+# Compile the arduino code and upload to the mega.
+#
+# Assumes the mega is at /dev/ttyACM0 by default, but this can be given as the 1st
+# positional argument.
+#
+# @author  Hamish Morgan
+# @date    16/12/2021
+# @license BSD
+
+
+if [[ -n "$1" ]]; then
+    SERIAL_DEVICE="$1"
+else
+    SERIAL_DEVICE=/dev/ttyACM0
+fi
+FQBN=arduino:avr:mega
+
+
+arduino-cli compile                 \
+            --fqbn $FQBN            \
+            rotate-speakers-arduino &&
+    arduino-cli upload                \
+                --port $SERIAL_DEVICE \
+                --fqbn $FQBN          \
+                --verbose             \
+                rotate-speakers-arduino
