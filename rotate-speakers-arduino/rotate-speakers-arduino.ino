@@ -69,8 +69,8 @@ void rotateTest()
 {
   int  forward[] = {  200,  200 };
   int backward[] = { -200, -200 };
-  turnMotors(  forward );
-  turnMotors( backward );
+  turnMotorsByTime(  forward );
+  turnMotorsByTime( backward );
 }
 
 void setMotorDirection( int motorNumber, int direction ) {
@@ -107,7 +107,8 @@ void decodeMessage( String message )
       message.substring(          0,         commaPos ).toInt(),
       message.substring( commaPos+1, message.length() ).toInt()
     };
-    turnMotors( motorPositions );
+    /* turnMotors( motorPositions ); */
+    turnMotorsByTime( motorPositions );
   }
 }
 
@@ -191,6 +192,50 @@ void turnMotors( int positions[] )
           notTimedOut( startTime, timeout ) ) {
     for ( int i = 0; i < NumMotors; i++ ) {
       if ( ! stillTurning( i, positions[i] ) ) {
+        motorOff(i);
+      }
+    }
+    delay(10);
+  }
+  motorsOff();
+}
+
+bool eitherMotorStillTurning( int positions[],
+                              int idx,
+                              unsigned long startTime,
+                              unsigned long currentTime )
+{
+  if ( idx >= NumMotors ) {
+    return false;
+  }
+  return ( currentTime < startTime + positions[idx] ) ||
+    eitherMotorStillTurning( positions, idx+1, startTime, currentTime );
+}
+
+void makePositionsAbsolute( int positions[] )
+{
+  for ( int i = 0; i < NumMotors; i++ ) {
+    positions[i] = abs(positions[i]);
+  }
+}
+
+void turnMotorsByTime( int positions[] )
+{
+  /**
+     Assume encoders don't work, use positions as time
+  */
+  setMotorDirections( positions );
+  makePositionsAbsolute( positions );
+  motorsOn( positions );
+  unsigned long startTime = millis();
+  unsigned long timeout = 3000;  // milliseconds
+  while ( notTimedOut( startTime, timeout ) ) {
+    unsigned long currentTime = millis();
+    if ( ! eitherMotorStillTurning( positions, 0, startTime, currentTime ) ) {
+      break;
+    }
+    for ( int i = 0; i < NumMotors; i++ ) {
+      if ( currentTime - startTime > positions[i] ) {
         motorOff(i);
       }
     }
